@@ -14,6 +14,7 @@ import (
 	"go.opencensus.io/trace"
 
 	"github.com/wavefronthq/wavefront-sdk-go/application"
+	"github.com/wavefronthq/wavefront-sdk-go/histogram"
 	wfsender "github.com/wavefronthq/wavefront-sdk-go/senders"
 )
 
@@ -43,7 +44,9 @@ func main() {
 
 	// Configure Wavefront Exporter
 	qSize := 100
-	exporter, _ := wavefront.NewExporter(sender, wavefront.QueueSize(qSize), wavefront.AppTags(appTags))
+	exporter, _ := wavefront.NewExporter(sender,
+		wavefront.QueueSize(qSize), wavefront.AppTags(appTags),
+		wavefront.Granularity(histogram.MINUTE))
 
 	// Register view exporter
 	view.RegisterExporter(exporter)

@@ -14,6 +14,8 @@ import (
 const (
 	DefaultSource    = ""
 	DefaultQueueSize = 1000
+
+	nanoToMillis int64 = 1e6
 )
 
 // Options
@@ -82,12 +84,8 @@ type Exporter struct {
 func NewExporter(sender wfsender.Sender, option ...Option) (*Exporter, error) {
 	defOptions := Options{
 		Source: DefaultSource,
-		Hgs: map[histogram.Granularity]bool{
-			histogram.MINUTE: false,
-			histogram.HOUR:   false,
-			histogram.DAY:    false,
-		},
-		qSize: DefaultQueueSize,
+		Hgs:    map[histogram.Granularity]bool{},
+		qSize:  DefaultQueueSize,
 	}
 
 	for _, o := range option {

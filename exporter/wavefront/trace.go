@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	nanoToMillis = 1000000
-
 	// Tags
 	spanKindKey  = "SpanKind"
 	errTagKey    = "error"
