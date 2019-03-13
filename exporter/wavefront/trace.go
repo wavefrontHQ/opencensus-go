@@ -11,19 +11,19 @@ import (
 )
 
 const (
-	// Tags
-	spanKindKey  = "SpanKind"
-	errTagKey    = "error"
-	errMsgTagKey = "error_msg"
+	// Span Tags
+	spanKindKey   = "span.kind"
+	errTagKey     = "error"
+	errCodeTagKey = "error_code"
 
-	// Annotations
-	annoMsgKey = "log_msg"
-
-	// Message Events
-	msgIDKey     = "MsgID"
-	msgTypeKey   = "MsgType"
-	msgCmpSzKey  = "MsgCompressedByteSize"
-	msgUcmpSzKey = "MsgUncompressedByteSize"
+	// Span Logs
+	spanLogErrMsgKey = "message"
+	spanLogEventKey  = "event"
+	annoMsgKey       = "log_msg"
+	msgIDKey         = "MsgID"
+	msgTypeKey       = "MsgType"
+	msgCmpSzKey      = "MsgCompressedByteSize"
+	msgUcmpSzKey     = "MsgUncompressedByteSize"
 )
 
 var (
@@ -83,31 +83,46 @@ func (e *Exporter) processSpan(sd *trace.SpanData) {
 
 	if sd.Status.Code != trace.StatusCodeOK {
 		spanTags = append(spanTags,
-			wfsender.SpanTag{Key: errTagKey, Value: enumString(int(sd.Status.Code), statusCodeStrings[:])},
-			wfsender.SpanTag{Key: errMsgTagKey, Value: sd.Status.Message},
+			wfsender.SpanTag{Key: errTagKey, Value: "true"},
+			wfsender.SpanTag{Key: errCodeTagKey, Value: enumString(int(sd.Status.Code), statusCodeStrings[:])},
 		)
 	}
 
 	// Span Logs
-	spanLogs := make([]wfsender.SpanLog, len(sd.Annotations)+len(sd.MessageEvents))
-	for i, a := range sd.Annotations {
+	spanLogs := make([]wfsender.SpanLog, 0, 1+len(sd.Annotations)+len(sd.MessageEvents))
+
+	if sd.Status.Code != trace.StatusCodeOK && sd.Status.Message != "" {
+		spanLogs = append(spanLogs, wfsender.SpanLog{
+			Timestamp: sd.EndTime.UnixNano() / nanoToMillis,
+			Fields: map[string]string{
+				spanLogErrMsgKey: sd.Status.Message,
+				spanLogEventKey:  errTagKey,
+			},
+		})
+	}
+
+	for _, a := range sd.Annotations {
 		annoTags := make(map[string]string, 1+len(a.Attributes))
+		annoTags[annoMsgKey] = a.Message
 		for k, v := range a.Attributes {
 			annoTags[k] = serialize(v)
 		}
-		annoTags[annoMsgKey] = a.Message
-		spanLogs[i].Timestamp = a.Time.UnixNano() / nanoToMillis
-		spanLogs[i].Fields = annoTags
+		spanLogs = append(spanLogs, wfsender.SpanLog{
+			Timestamp: a.Time.UnixNano() / nanoToMillis,
+			Fields:    annoTags,
+		})
 	}
-	for i, m := range sd.MessageEvents {
-		i2 := i + len(sd.Annotations)
-		meTags := make(map[string]string, 4)
-		meTags[msgIDKey] = serialize(m.MessageID)
-		meTags[msgTypeKey] = enumString(int(m.EventType), msgEventStrings[:])
-		meTags[msgCmpSzKey] = serialize(m.CompressedByteSize)
-		meTags[msgUcmpSzKey] = serialize(m.UncompressedByteSize)
-		spanLogs[i2].Timestamp = m.Time.UnixNano() / nanoToMillis
-		spanLogs[i2].Fields = meTags
+	for _, m := range sd.MessageEvents {
+		meTags := map[string]string{
+			msgIDKey:     serialize(m.MessageID),
+			msgTypeKey:   enumString(int(m.EventType), msgEventStrings[:]),
+			msgCmpSzKey:  serialize(m.CompressedByteSize),
+			msgUcmpSzKey: serialize(m.UncompressedByteSize),
+		}
+		spanLogs = append(spanLogs, wfsender.SpanLog{
+			Timestamp: m.Time.UnixNano() / nanoToMillis,
+			Fields:    meTags,
+		})
 	}
 
 	startTime := sd.StartTime.UnixNano() / nanoToMillis
@@ -123,7 +138,7 @@ func (e *Exporter) processSpan(sd *trace.SpanData) {
 	cmd := func() {
 		defer e.semRelease()
 
-		logError("Error sending span: ", e.sender.SendSpan(
+		e.logError("Error sending span: ", e.sender.SendSpan(
 			sd.Name,
 			startTime, endTime,
 			e.Source,
@@ -134,7 +149,6 @@ func (e *Exporter) processSpan(sd *trace.SpanData) {
 
 	if !e.queueCmd(cmd) {
 		atomic.AddUint64(&e.spansDropped, 1)
-		//log.Printf("Span dropped. Queue full (Total Dropped = %d)", dropped)
 	}
 }
 

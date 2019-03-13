@@ -3,6 +3,7 @@ package wavefront
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 
 	"github.com/wavefronthq/wavefront-sdk-go/application"
 	"github.com/wavefronthq/wavefront-sdk-go/histogram"
@@ -20,10 +21,11 @@ const (
 
 // Options
 type Options struct {
-	Source string
-	Hgs    map[histogram.Granularity]bool
-	appMap map[string]string
-	qSize  int
+	Source         string
+	Hgs            map[histogram.Granularity]bool
+	VerboseLogging bool
+	appMap         map[string]string
+	qSize          int
 }
 
 type Option func(*Options)
@@ -63,15 +65,23 @@ func QueueSize(queueSize int) Option {
 	}
 }
 
+// VerboseLogging enables logging of errors per span/metric.
+// Logs to stderr or equivalent
+func VerboseLogging() Option {
+	return func(o *Options) {
+		o.VerboseLogging = true
+	}
+}
+
 // Exporter
 type Exporter struct {
-	Options
 	sender wfsender.Sender
 	sem    chan struct{}
 	wg     sync.WaitGroup
 
-	spansDropped   uint64
-	metricsDropped uint64
+	// Embeddings
+	Options
+	_SelfMetrics
 }
 
 // NewExporter returns a trace.Exporter configured to upload traces and views
@@ -98,6 +108,8 @@ func NewExporter(sender wfsender.Sender, option ...Option) (*Exporter, error) {
 		sem:     make(chan struct{}, defOptions.qSize),
 	}
 
+	exp.ReportSelfHealth() // Disable by default?
+
 	return exp, nil
 }
 
@@ -105,12 +117,6 @@ func NewExporter(sender wfsender.Sender, option ...Option) (*Exporter, error) {
 func (e *Exporter) Flush() {
 	e.wg.Wait()
 	e.sender.Flush()
-	if e.spansDropped > 0 {
-		log.Printf("Warning: %d spans were dropped", e.spansDropped)
-	}
-	if e.metricsDropped > 0 {
-		log.Printf("Warning: %d metrics were dropped", e.metricsDropped)
-	}
 }
 
 // ExportSpan exports given span to Wavefront
@@ -123,15 +129,7 @@ func (e *Exporter) ExportView(viewData *view.Data) {
 	e.processView(viewData)
 }
 
-func (e *Exporter) SpansDropped() uint64 {
-	return e.spansDropped
-}
-
-func (e *Exporter) MetricsDropped() uint64 {
-	return e.metricsDropped
-}
-
-// helpers
+// Helpers
 
 func (e *Exporter) queueCmd(cmd SendCmd) bool {
 	select {
@@ -149,8 +147,11 @@ func (e *Exporter) semRelease() {
 	e.wg.Done()
 }
 
-func logError(msg string, err error) {
+func (e *Exporter) logError(msg string, err error) {
 	if err != nil {
-		log.Println(msg, err)
+		atomic.AddUint64(&e.senderErrors, 1)
+		if e.VerboseLogging {
+			log.Println(msg, err)
+		}
 	}
 }

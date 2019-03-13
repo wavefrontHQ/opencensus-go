@@ -44,7 +44,7 @@ func main() {
 
 	// Configure Wavefront Exporter
 	qSize := 100
-	exporter, _ := wavefront.NewExporter(sender,
+	exporter, _ := wavefront.NewExporter(sender, wavefront.VerboseLogging(),
 		wavefront.QueueSize(qSize), wavefront.AppTags(appTags),
 		wavefront.Granularity(histogram.MINUTE))
 
@@ -101,6 +101,7 @@ func main() {
 	span.End()
 
 	time.Sleep(1 * time.Second)
+	exporter.StopSelfHealth()
 	exporter.Flush()
 }
 

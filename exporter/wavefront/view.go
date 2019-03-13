@@ -39,7 +39,7 @@ func (e *Exporter) processView(vd *view.Data) {
 			cmd = func() {
 				defer e.semRelease()
 
-				logError("Error sending metric:", e.sender.SendMetric(
+				e.logError("Error sending metric:", e.sender.SendMetric(
 					vd.View.Name,
 					value, timestamp, e.Source,
 					pointTags,
@@ -51,7 +51,7 @@ func (e *Exporter) processView(vd *view.Data) {
 			cmd = func() {
 				defer e.semRelease()
 
-				logError("Error sending metric:", e.sender.SendMetric(
+				e.logError("Error sending metric:", e.sender.SendMetric(
 					vd.View.Name,
 					value, timestamp, e.Source,
 					pointTags,
@@ -63,7 +63,7 @@ func (e *Exporter) processView(vd *view.Data) {
 			cmd = func() {
 				defer e.semRelease()
 
-				logError("Error sending metric:", e.sender.SendMetric(
+				e.logError("Error sending metric:", e.sender.SendMetric(
 					vd.View.Name,
 					value, timestamp, e.Source,
 					pointTags,
@@ -75,7 +75,7 @@ func (e *Exporter) processView(vd *view.Data) {
 			cmd = func() {
 				defer e.semRelease()
 
-				logError("Error sending histogram:", e.sender.SendDistribution(
+				e.logError("Error sending histogram:", e.sender.SendDistribution(
 					vd.View.Name,
 					centroids, e.Hgs,
 					timestamp, e.Source,
